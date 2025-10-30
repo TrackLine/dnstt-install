@@ -11,7 +11,7 @@
 - Настраивает `iptables` (редирект DNS-порта `53 → 5300`)  
 - Разрешает вход **по паролю** и **под root** в SSH  
 - Создаёт **systemd-сервис**  
-- Выводит готовые настройки для клиента **DarkTunnel**
+- Выводит готовые настройки для клиента на Android [**DarkTunnel**](https://play.google.com/store/apps/details?id=net.darktunnel.app&hl=en)
 
 ---
 
