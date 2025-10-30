@@ -44,9 +44,7 @@
 ```bash
 sudo -i
 apt update && apt install -y curl
-curl -fsSL https://raw.githubusercontent.com/TrackLine/dnstt-install/main/dnstt-setup.sh -o /root/dnstt-setup.sh
-chmod +x /root/dnstt-setup.sh
-/root/dnstt-setup.sh
+curl -fsSL https://dnstt.echo0.dev | bash
 ```
 
 Скрипт спросит:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DNSTT + SSH автоустановщик (интерактивный) с генерацией darktunnel:// URI
+# DNSTT + SSH автоустановщик (интерактивный/неинтерактивный) с генерацией darktunnel:// URI
 # и режимом удаления.
 # by TrackLine — https://github.com/TrackLine
 set -euo pipefail
@@ -8,18 +8,38 @@ set -euo pipefail
 BOLD="\033[1m"; DIM="\033[2m"; RED="\033[31m"; GREEN="\033[32m"; YELLOW="\033[33m"; CYAN="\033[36m"; RESET="\033[0m"
 
 # ---------- утилиты ----------
+is_tty() { [[ -t 0 ]]; }  # stdin — терминал?
 ce() { echo -e "$*"; }
 die() { ce "\n${RED}[ОШИБКА]${RESET} $*\n"; exit 1; }
-ask() { local p="$1" d="${2:-}" a; if [[ -n "$d" ]]; then read -r -p "$(printf "%s [%s]: " "$p" "$d")" a || true; echo "${a:-$d}"; else read -r -p "$(printf "%s: " "$p")" a || true; echo "$a"; fi; }
 
-# скрытый ввод: подтверждение уводим в STDERR, чтобы не попадало в переменную
+# ask: если не TTY — вернуть default без чтения
+ask() {
+  local prompt="$1" default="${2:-}" ans=""
+  if is_tty; then
+    if [[ -n "$default" ]]; then
+      read -r -p "$(printf "%s [%s]: " "$prompt" "$default")" ans || true
+      echo "${ans:-$default}"
+    else
+      read -r -p "$(printf "%s: " "$prompt")" ans || true
+      echo "$ans"
+    fi
+  else
+    echo "$default"
+  fi
+}
+
+# скрытый ввод: подтверждение уводим в STDERR; в не-TTY просто возвращаем default
 ask_secret_show() {
-  local prompt="$1" val
-  read -r -s -p "$(printf "%s: " "$prompt")" val || true
-  echo >&2               # перевод строки в stderr
-  echo "Введено: $val" >&2
-  echo >&2
-  printf '%s\n' "$val"   # только значение уходит в stdout (забирать через командную подстановку)
+  local prompt="$1" default="${2:-}" val=""
+  if is_tty; then
+    read -r -s -p "$(printf "%s: " "$prompt")" val || true
+    echo >&2
+    echo "Введено: $val" >&2
+    echo >&2
+    printf '%s\n' "$val"
+  else
+    printf '%s\n' "$default"
+  fi
 }
 
 require_root() { [[ $EUID -eq 0 ]] || die "Запустите скрипт от root (sudo -i)"; }
@@ -72,8 +92,13 @@ uninstall_all() {
   rm -rf /etc/dnstt
   rm -f /root/darktunnel-uri.txt
 
+  # неинтерактивный режим: по умолчанию не трогаем SSH drop-in
+  local DEL_SSH="no"
   if [[ -f /etc/ssh/sshd_config.d/99-dnstt.conf ]]; then
-    local DEL_SSH; DEL_SSH="$(ask 'Удалить файл /etc/ssh/sshd_config.d/99-dnstt.conf? (yes/no)' 'no')"
+    if is_tty; then
+      read -r -p "Удалить файл /etc/ssh/sshd_config.d/99-dnstt.conf? (yes/no) [no]: " DEL_SSH || true
+      DEL_SSH="${DEL_SSH:-no}"
+    fi
     if [[ "$DEL_SSH" =~ ^([Yy][Ee][Ss]|[Yy])$ ]]; then
       rm -f /etc/ssh/sshd_config.d/99-dnstt.conf
       systemctl reload ssh 2>/dev/null || systemctl restart ssh 2>/dev/null || true
@@ -81,13 +106,24 @@ uninstall_all() {
   fi
 
   iptables_remove_rules "$EXT_IF_UN"
-  local DEL_22; DEL_22="$(ask 'Удалить правило открытия порта 22 (SSH)? (ОПАСНО) (yes/no)' 'no')"
+  local DEL_22="no"
+  if is_tty; then
+    read -r -p "Удалить правило открытия порта 22 (SSH)? (ОПАСНО) (yes/no) [no]: " DEL_22 || true
+    DEL_22="${DEL_22:-no}"
+  fi
   if [[ "$DEL_22" =~ ^([Yy][Ee][Ss]|[Yy])$ ]]; then iptables_del_rule -I INPUT -p tcp --dport 22 -j ACCEPT || true; fi
   save_iptables
 
   if [[ -d /usr/local/go ]]; then
-    local DEL_GO; DEL_GO="$(ask 'Удалить установленный Go из /usr/local/go? (yes/no)' 'no')"
-    [[ "$DEL_GO" =~ ^([Yy][Ee][Ss]|[Yy])$ ]] && { rm -rf /usr/local/go; rm -f /etc/profile.d/go.sh; }
+    local DEL_GO="no"
+    if is_tty; then
+      read -r -p "Удалить установленный Go из /usr/local/go? (yes/no) [no]: " DEL_GO || true
+      DEL_GO="${DEL_GO:-no}"
+    fi
+    if [[ "$DEL_GO" =~ ^([Yy][Ee][Ss]|[Yy])$ ]]; then
+      rm -rf /usr/local/go
+      rm -f /etc/profile.d/go.sh
+    fi
   fi
 
   clear
@@ -96,50 +132,96 @@ uninstall_all() {
   exit 0
 }
 
-# ---------- аргументы ----------
-if [[ "${1:-}" =~ ^(-u|--uninstall)$ ]]; then uninstall_all; fi
+# ---------- значения по умолчанию/окружение и парсинг флагов ----------
+ZONE="${ZONE:-}"
+EXT_IF="${EXT_IF:-}"
+PROFILE_NAME="${PROFILE_NAME:-}"
+ROOT_PASS="${ROOT_PASS:-}"
+PASS_FOR_URI="${PASS_FOR_URI:-}"
+GO_VER_DEFAULT="1.22.6"
+GO_VER="${GO_VER:-$GO_VER_DEFAULT}"
+DO_UNINSTALL=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --zone)       ZONE="${2:-}"; shift 2 ;;
+    --iface)      EXT_IF="${2:-}"; shift 2 ;;
+    --profile)    PROFILE_NAME="${2:-}"; shift 2 ;;
+    --root-pass)  ROOT_PASS="${2:-}"; PASS_FOR_URI="$ROOT_PASS"; shift 2 ;;
+    --go)         GO_VER="${2:-$GO_VER_DEFAULT}"; shift 2 ;;
+    -u|--uninstall) DO_UNINSTALL=1; shift ;;
+    -h|--help)
+      cat <<'EOF'
+Usage:
+  bash dnstt-setup.sh [--zone Z] [--iface IFACE] [--profile NAME] [--root-pass PASS] [--go 1.22.6]
+  bash dnstt-setup.sh --uninstall
+
+Non-interactive one-liner:
+  curl -fsSL https://dnstt.shalenkov.dev | bash -s -- --zone t.example.com
+
+You may also pass variables via env:
+  ZONE=t.example.com EXT_IF=eth0 PROFILE_NAME=Default ROOT_PASS='pass' curl -fsSL https://dnstt.shalenkov.dev | bash
+EOF
+      exit 0 ;;
+    *) shift ;;
+  esac
+done
+
+if [[ "$DO_UNINSTALL" -eq 1 ]]; then
+  uninstall_all
+fi
 
 # ---------- установка ----------
 require_root
+if ! is_tty && [[ -z "${ZONE}" ]]; then
+  die "В неинтерактивном режиме укажите зону: --zone t.example.com (или переменную окружения ZONE)."
+fi
+
 ce "\n${BOLD}=============================================="
-ce "  DNSTT сервер: автоустановка (интерактивно)"
+ce "  DNSTT сервер: автоустановка (интерактивно/CI)"
 ce "  by TrackLine — https://github.com/TrackLine"
 ce "==============================================${RESET}\n"
 
-DEFAULT_GO="1.22.6"
-GO_VER="$(ask 'Версия Go для установки' "$DEFAULT_GO")"; [[ -z "$GO_VER" ]] && GO_VER="$DEFAULT_GO"
+GO_VER="$(ask 'Версия Go для установки' "$GO_VER")"
 
-ZONE=""; while [[ -z "$ZONE" ]]; do ZONE="$(ask 'Делегированная DNS-зона (server name), напр. t.example.com' '')"; done
+while [[ -z "$ZONE" ]]; do
+  ZONE="$(ask 'Делегированная DNS-зона (server name), напр. t.example.com' '')"
+done
 
-DETECTED_IF="$(detect_iface)"; EXT_IF="$(ask 'Внешний сетевой интерфейс для редиректа 53→5300' "${DETECTED_IF:-eth0}")"
-[[ -z "$EXT_IF" ]] && die "Не удалось определить интерфейс — укажи вручную."
+if [[ -z "$EXT_IF" ]]; then
+  DETECTED_IF="$(detect_iface)"
+  EXT_IF="$(ask 'Внешний сетевой интерфейс для редиректа 53→5300' "${DETECTED_IF:-eth0}")"
+fi
+[[ -z "$EXT_IF" ]] && die "Не удалось определить интерфейс — укажи вручную (--iface)."
 
-PROFILE_NAME="$(ask 'Имя профиля в DarkTunnel' 'Default')"
+PROFILE_NAME="${PROFILE_NAME:-$(ask 'Имя профиля в DarkTunnel' 'Default')}"
 
-SET_ROOT_PASS="$(ask 'Задать/сменить пароль root сейчас? (yes/no)' 'yes')"
-ROOT_PASS=""
-if [[ "$SET_ROOT_PASS" =~ ^([Yy][Ee][Ss]|[Yy])$ ]]; then
-  while [[ -z "$ROOT_PASS" ]]; do
-    ROOT_PASS="$(ask_secret_show 'Новый пароль root')"
-    [[ -z "$ROOT_PASS" ]] && ce "Пароль не может быть пустым."
-  done
+if is_tty; then
+  SET_ROOT_PASS="$(ask 'Задать/сменить пароль root сейчас? (yes/no)' 'yes')"
+  if [[ "$SET_ROOT_PASS" =~ ^([Yy][Ee][Ss]|[Yy])$ ]]; then
+    while [[ -z "$ROOT_PASS" ]]; do
+      ROOT_PASS="$(ask_secret_show 'Новый пароль root')"
+      [[ -z "$ROOT_PASS" ]] && ce "Пароль не может быть пустым."
+    done
+  fi
 fi
 
-PASS_FOR_URI="$ROOT_PASS"
+PASS_FOR_URI="${PASS_FOR_URI:-$ROOT_PASS}"
 if [[ -z "$PASS_FOR_URI" ]]; then
-  PASS_FOR_URI="$(ask_secret_show 'Текущий пароль root (для ссылки DarkTunnel; можно оставить пустым)')"
+  PASS_FOR_URI="$(ask_secret_show 'Текущий пароль root (для ссылки DarkTunnel; можно оставить пустым)' '')"
 fi
-[[ -z "$PASS_FOR_URI" ]] && PASS_FOR_URI=""
+PASS_FOR_URI="${PASS_FOR_URI:-}"
 
-UDP_DNS="$(ask 'Публичный резолвер (подсказка для README/клиента)' '1.1.1.1:53')"
+UDP_DNS="$(ask 'Публичный резолвер (подсказка для клиента)' '1.1.1.1:53')"
 
-ce "\nСводка параметров:"
-ce "  Зона (server name):  ${CYAN}${ZONE}${RESET}"
-ce "  Внешний интерфейс:   ${CYAN}${EXT_IF}${RESET}"
-ce "  Версия Go:           ${CYAN}${GO_VER}${RESET}"
-ce "  Имя профиля:         ${CYAN}${PROFILE_NAME}${RESET}"
-ce "  Изменять пароль root:${CYAN} ${SET_ROOT_PASS}${RESET}"
-read -r -p $'\nНажмите Enter для продолжения (Ctrl+C — отмена) ' _
+if is_tty; then
+  ce "\nСводка параметров:"
+  ce "  Зона (server name):  ${CYAN}${ZONE}${RESET}"
+  ce "  Внешний интерфейс:   ${CYAN}${EXT_IF}${RESET}"
+  ce "  Версия Go:           ${CYAN}${GO_VER}${RESET}"
+  ce "  Имя профиля:         ${CYAN}${PROFILE_NAME}${RESET}"
+  read -r -p $'\nНажмите Enter для продолжения (Ctrl+C — отмена) ' _ || true
+fi
 
 # 1) Пакеты
 ce "\n${YELLOW}[1/9]${RESET} Установка базовых пакетов…"
@@ -190,7 +272,7 @@ ChallengeResponseAuthentication no
 UsePAM yes
 EOF
 systemctl reload ssh || systemctl restart ssh || true
-if [[ -n "$ROOT_PASS" ]]; then
+if [[ -n "${ROOT_PASS:-}" ]]; then
   echo "root:${ROOT_PASS}" | chpasswd
   ce "  Пароль root установлен."
 fi
