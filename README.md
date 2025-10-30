@@ -2,7 +2,7 @@
 **Автор:** [TrackLine](https://github.com/TrackLine)  
 **Оригинальный проект:** [gharib-uk/dnstt](https://github.com/gharib-uk/dnstt)
 
-Полностью автоматический установщик **DNSTT-сервера** с поддержкой **SSH через DNS-туннель** для клиента **DarkTunnel (Android)**.  
+Полностью автоматический установщик **DNSTT-сервера** с поддержкой **SSH через DNS-туннель** для клиента [**DarkTunnel (Android)**](https://play.google.com/store/apps/details?id=net.darktunnel.app&pcampaignid=web_share).  
 Скрипт интерактивный, на русском, **автоматически генерирует ссылку** `darktunnel://…` для импорта профиля и содержит **режим удаления** (возврат VPS в исходное состояние).
 
 ---
