@@ -12,10 +12,16 @@ is_tty() { [[ -t 0 ]]; }  # stdin — терминал?
 ce() { echo -e "$*"; }
 die() { ce "\n${RED}[ОШИБКА]${RESET} $*\n"; exit 1; }
 
-# ask: если не TTY — вернуть default без чтения
+# ---------- поведение по умолчанию ----------
+# если stdin не TTY — принудительно включаем интерактивный режим
+if [[ ! -t 0 ]]; then
+  export FORCE_INTERACTIVE=1
+fi
+
+# ask: если не TTY — вернуть default без чтения (или спросить, если FORCE_INTERACTIVE=1)
 ask() {
   local prompt="$1" default="${2:-}" ans=""
-  if is_tty; then
+  if is_tty || [[ "${FORCE_INTERACTIVE:-0}" = "1" ]]; then
     if [[ -n "$default" ]]; then
       read -r -p "$(printf "%s [%s]: " "$prompt" "$default")" ans || true
       echo "${ans:-$default}"
@@ -31,7 +37,7 @@ ask() {
 # скрытый ввод: подтверждение уводим в STDERR; в не-TTY просто возвращаем default
 ask_secret_show() {
   local prompt="$1" default="${2:-}" val=""
-  if is_tty; then
+  if is_tty || [[ "${FORCE_INTERACTIVE:-0}" = "1" ]]; then
     read -r -s -p "$(printf "%s: " "$prompt")" val || true
     echo >&2
     echo "Введено: $val" >&2
@@ -92,10 +98,9 @@ uninstall_all() {
   rm -rf /etc/dnstt
   rm -f /root/darktunnel-uri.txt
 
-  # неинтерактивный режим: по умолчанию не трогаем SSH drop-in
   local DEL_SSH="no"
   if [[ -f /etc/ssh/sshd_config.d/99-dnstt.conf ]]; then
-    if is_tty; then
+    if is_tty || [[ "${FORCE_INTERACTIVE:-0}" = "1" ]]; then
       read -r -p "Удалить файл /etc/ssh/sshd_config.d/99-dnstt.conf? (yes/no) [no]: " DEL_SSH || true
       DEL_SSH="${DEL_SSH:-no}"
     fi
@@ -107,7 +112,7 @@ uninstall_all() {
 
   iptables_remove_rules "$EXT_IF_UN"
   local DEL_22="no"
-  if is_tty; then
+  if (is_tty || [[ "${FORCE_INTERACTIVE:-0}" = "1" ]]); then
     read -r -p "Удалить правило открытия порта 22 (SSH)? (ОПАСНО) (yes/no) [no]: " DEL_22 || true
     DEL_22="${DEL_22:-no}"
   fi
@@ -116,7 +121,7 @@ uninstall_all() {
 
   if [[ -d /usr/local/go ]]; then
     local DEL_GO="no"
-    if is_tty; then
+    if (is_tty || [[ "${FORCE_INTERACTIVE:-0}" = "1" ]]); then
       read -r -p "Удалить установленный Go из /usr/local/go? (yes/no) [no]: " DEL_GO || true
       DEL_GO="${DEL_GO:-no}"
     fi
@@ -157,10 +162,10 @@ Usage:
   bash dnstt-setup.sh --uninstall
 
 Non-interactive one-liner:
-  curl -fsSL https://dnstt.shalenkov.dev | bash -s -- --zone t.example.com
+  curl -fsSL https://dnstt.echo0.dev | bash -s -- --zone t.example.com
 
 You may also pass variables via env:
-  ZONE=t.example.com EXT_IF=eth0 PROFILE_NAME=Default ROOT_PASS='pass' curl -fsSL https://dnstt.shalenkov.dev | bash
+  ZONE=t.example.com EXT_IF=eth0 PROFILE_NAME=Default ROOT_PASS='pass' curl -fsSL https://dnstt.echo0.dev | bash
 EOF
       exit 0 ;;
     *) shift ;;
@@ -173,14 +178,6 @@ fi
 
 # ---------- установка ----------
 require_root
-if [[ -z "${ZONE}" && -z "${FORCE_INTERACTIVE:-}" ]]; then
-  die "В неинтерактивном режиме укажите зону: --zone t.example.com (или переменную окружения ZONE)."
-fi
-
-# Если stdin не TTY, но явно не передан --zone, включаем принудительно интерактивный режим
-if ! is_tty && [[ -z "${ZONE}" ]]; then
-  export FORCE_INTERACTIVE=1
-fi
 
 ce "\n${BOLD}=============================================="
 ce "  DNSTT сервер: автоустановка (интерактивно/CI)"
@@ -201,7 +198,7 @@ fi
 
 PROFILE_NAME="${PROFILE_NAME:-$(ask 'Имя профиля в DarkTunnel' 'Default')}"
 
-if is_tty; then
+if is_tty || [[ "${FORCE_INTERACTIVE:-0}" = "1" ]]; then
   SET_ROOT_PASS="$(ask 'Задать/сменить пароль root сейчас? (yes/no)' 'yes')"
   if [[ "$SET_ROOT_PASS" =~ ^([Yy][Ee][Ss]|[Yy])$ ]]; then
     while [[ -z "$ROOT_PASS" ]]; do
@@ -219,7 +216,7 @@ PASS_FOR_URI="${PASS_FOR_URI:-}"
 
 UDP_DNS="$(ask 'Публичный резолвер (подсказка для клиента)' '1.1.1.1:53')"
 
-if is_tty; then
+if is_tty || [[ "${FORCE_INTERACTIVE:-0}" = "1" ]]; then
   ce "\nСводка параметров:"
   ce "  Зона (server name):  ${CYAN}${ZONE}${RESET}"
   ce "  Внешний интерфейс:   ${CYAN}${EXT_IF}${RESET}"
