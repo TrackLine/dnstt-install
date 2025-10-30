@@ -1,5 +1,6 @@
 # 🛰️ DNSTT + SSH автоустановщик для VPS
-**Автор:** [TrackLine](https://github.com/TrackLine)  
+**Автор:** [TrackLine](https://github.com/TrackLine)
+[**Сказать спасибо**](https://shalenkov.dev/about/)
 **Оригинальный проект:** [gharib-uk/dnstt](https://github.com/gharib-uk/dnstt)
 
 Полностью автоматический установщик **DNSTT-сервера** с поддержкой **SSH через DNS-туннель** для клиента [**DarkTunnel (Android)**](https://play.google.com/store/apps/details?id=net.darktunnel.app&pcampaignid=web_share).  
@@ -138,7 +139,6 @@ tail -f /var/log/auth.log
 
 ## ✨ Автор
 
-**by [TrackLine](https://github.com/TrackLine)**  
-🧰 скрипт: `dnstt-setup.sh`  
+**by [TrackLine](https://github.com/TrackLine)** 
 📦 лицензия: MIT  
 🧩 основано на [gharib-uk/dnstt](https://github.com/gharib-uk/dnstt)
