@@ -173,8 +173,13 @@ fi
 
 # ---------- установка ----------
 require_root
-if ! is_tty && [[ -z "${ZONE}" ]]; then
+if [[ -z "${ZONE}" && -z "${FORCE_INTERACTIVE:-}" ]]; then
   die "В неинтерактивном режиме укажите зону: --zone t.example.com (или переменную окружения ZONE)."
+fi
+
+# Если stdin не TTY, но явно не передан --zone, включаем принудительно интерактивный режим
+if ! is_tty && [[ -z "${ZONE}" ]]; then
+  export FORCE_INTERACTIVE=1
 fi
 
 ce "\n${BOLD}=============================================="
