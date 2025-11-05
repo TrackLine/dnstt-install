@@ -1,47 +1,50 @@
-# 🛰️ DNSTT + SSH автоустановщик для VPS
-**Автор:** [TrackLine](https://github.com/TrackLine)
-[**Сказать спасибо**](https://shalenkov.dev/about)
+# 🛰️ DNSTT + SSH Auto-Installer for VPS
 
-**Оригинальный проект:** [gharib-uk/dnstt](https://github.com/gharib-uk/dnstt)
+**Language:** [🇬🇧 English](README.md) | [🇷🇺 Русский](README.ru.md)
 
-Полностью автоматический установщик **DNSTT-сервера** с поддержкой **SSH через DNS-туннель** для клиента [**DarkTunnel (Android)**](https://play.google.com/store/apps/details?id=net.darktunnel.app&pcampaignid=web_share).  
-Скрипт интерактивный, на русском, **автоматически генерирует ссылку** `darktunnel://…` для импорта профиля и содержит **режим удаления** (возврат VPS в исходное состояние).
+**Author:** [TrackLine](https://github.com/TrackLine)  
+[**Say Thanks**](https://shalenkov.dev/about)
 
----
+**Original Project:** [gharib-uk/dnstt](https://github.com/gharib-uk/dnstt)
 
-## 🚀 Что делает скрипт
-- Ставит **Go 1.22.x** (удаляется по желанию в режиме деинсталляции).
-- Собирает `dnstt-server` из исходников (репозиторий см. выше).
-- Генерирует ключи `server.key` и `server.pub`.
-- Настраивает `iptables`: **редирект 53 → 5300** и открывает порты.
-- Разрешает **вход по паролю** и **root‑вход** в SSH (создаётся отдельный drop‑in `sshd_config.d/99-dnstt.conf`).
-- Создаёт и запускает **systemd‑сервис** `dnstt-server`.
-- **Генерирует ссылку** вида `darktunnel://…` (формат экспорта DarkTunnel) и сохраняет её в `/root/darktunnel-uri.txt`.
-- Имеет **режим удаления** `--uninstall`: очищает сервис/бинарник/ключи, сворачивает правила iptables, по желанию удаляет drop‑in SSH и Go.
+Fully automatic installer for **DNSTT server** with **SSH over DNS tunnel** support for the [**DarkTunnel (Android)**](https://play.google.com/store/apps/details?id=net.darktunnel.app&pcampaignid=web_share) client.  
+The script is interactive, **automatically generates** a `darktunnel://…` link for profile import and includes an **uninstall mode** (returns VPS to its original state).
 
 ---
 
-## ⚙️ Требования
-- VPS с **Ubuntu/Debian** и правами `root`.
-- Делегированный **поддомен** (например `t.example.com`).
-- На сервере должны быть **открыты порты 22 (SSH)** и **53 (UDP/TCP)** на фаерволе и у провайдера.
+## 🚀 What the Script Does
+- Installs **Go 1.22.x** (can be removed during uninstall if desired).
+- Builds `dnstt-server` from source (see repository above).
+- Generates `server.key` and `server.pub` keys.
+- Configures `iptables`: **redirect 53 → 5300** and opens ports.
+- Enables **password authentication** and **root login** in SSH (creates a separate drop-in `sshd_config.d/99-dnstt.conf`).
+- Creates and starts the **systemd service** `dnstt-server`.
+- **Generates a link** in the format `darktunnel://…` (DarkTunnel export format) and saves it to `/root/darktunnel-uri.txt`.
+- Has an **uninstall mode** `--uninstall`: cleans up service/binary/keys, removes iptables rules, optionally removes SSH drop-in and Go.
 
 ---
 
-## 🌐 Настройка DNS (пример с Cloudflare)
+## ⚙️ Requirements
+- VPS with **Ubuntu/Debian** and `root` privileges.
+- A delegated **subdomain** (e.g., `t.example.com`).
+- Ports **22 (SSH)** and **53 (UDP/TCP)** must be **open** on the firewall and with the provider.
 
-Делегируйте поддомен на свой VPS. Пример записи:
+---
 
-| Тип | Имя | Значение | TTL |
+## 🌐 DNS Configuration (Cloudflare Example)
+
+Delegate a subdomain to your VPS. Example record:
+
+| Type | Name | Value | TTL |
 |---|---|---|---|
 | **NS** | `t` | `tns.example.com` | Auto |
-| **A**  | `tns` | `IP вашего VPS` | Auto |
+| **A**  | `tns` | `Your VPS IP` | Auto |
 
-Итог: запросы к `*.t.example.com` придут прямо на ваш VPS, где работает `dnstt-server`.
+Result: requests to `*.t.example.com` will go directly to your VPS, where `dnstt-server` is running.
 
 ---
 
-## 🔧 Установка
+## 🔧 Installation
 
 ```bash
 sudo -i
@@ -51,54 +54,54 @@ chmod +x /root/dnstt-setup.sh
 /root/dnstt-setup.sh
 ```
 
-Скрипт спросит:
-- Делегированную зону (например `t.example.com`).
-- Внешний интерфейс (чаще всего `eth0`).
-- Имя профиля для DarkTunnel.
-- Установить/не менять пароль `root` (и/или ввести текущий для генерации ссылки).
+The script will ask for:
+- Delegated zone (e.g., `t.example.com`).
+- External interface (usually `eth0`).
+- Profile name for DarkTunnel.
+- Set/keep `root` password (and/or enter current one for link generation).
 
-В конце экран очистится и вы увидите цветной итог:
-- параметры для клиента,
-- **готовую ссылку для импорта** `darktunnel://…`,
-- путь к файлу: `/root/darktunnel-uri.txt`.
+At the end, the screen will clear and you'll see a colored summary:
+- client parameters,
+- **ready-to-import link** `darktunnel://…`,
+- file path: `/root/darktunnel-uri.txt`.
 
 ---
 
-## 📱 Импорт профиля в DarkTunnel
+## 📱 Importing Profile to DarkTunnel
 
-Вариант 1 — через ссылку:
-1. Скопируйте вывод `darktunnel://…` на телефон (чат/почта/QR) в буфер обмена.
-2. Откройте DarkTunnel, нажмите на кнопку справа вверху (три точки), Config -> Import -> Clipboard — DarkTunnel подхватит конфиг.
+Option 1 — via link:
+1. Copy the `darktunnel://…` output to your phone (chat/email/QR) to clipboard.
+2. Open DarkTunnel, click the button in the top right (three dots), Config -> Import -> Clipboard — DarkTunnel will pick up the config.
 
-Вариант 2 — вручную (если нужно):
-| Поле | Значение |
+Option 2 — manually (if needed):
+| Field | Value |
 |---|---|
 | **Tunnel Type** | SSH Through DNSTT |
-| **Target** | `localhost:22@root:<ваш_пароль_root>` |
-| **UDP DNS** | `1.1.1.1:53` *(или свой публичный резолвер)* |
+| **Target** | `localhost:22@root:<your_root_password>` |
+| **UDP DNS** | `1.1.1.1:53` *(or your public resolver)* |
 | **Server name** | `t.example.com` |
-| **Public key** | содержимое `server.pub` (скрипт выведет) |
-| **Payload** | оставить пустым |
+| **Public key** | contents of `server.pub` (script will output) |
+| **Payload** | leave empty |
 
 ---
 
-## 🧩 Как это работает (коротко)
+## 🧩 How It Works (Brief)
 
-DNSTT упаковывает трафик в DNS‑запросы, которые почти всегда разрешены в сети.  
-Схема потока:
+DNSTT packages traffic into DNS queries, which are almost always allowed in networks.  
+Flow diagram:
 
 ```
-[DarkTunnel на Android] --DNS--> t.example.com (NS делегирован на VPS)
+[DarkTunnel on Android] --DNS--> t.example.com (NS delegated to VPS)
                                |
                                v
-                       [DNSTT-сервер на VPS] -> SSH (127.0.0.1:22) -> Интернет
+                       [DNSTT-server on VPS] -> SSH (127.0.0.1:22) -> Internet
 ```
 
-Снаружи трафик выглядит как обычный DNS.
+From the outside, traffic looks like regular DNS.
 
 ---
 
-## 🧠 Проверка и отладка
+## 🧠 Testing and Debugging
 
 ```bash
 systemctl status dnstt-server
@@ -108,38 +111,38 @@ iptables -t nat -L PREROUTING -n -v | grep ':53 '
 tail -f /var/log/auth.log
 ```
 
-Если не коннектится:
-- Проверьте, что **порты 22 и 53 (UDP/TCP) открыты**.
-- Убедитесь в корректном делегировании (`dig NS t.example.com +short`).
-- Смотрите логи `dnstt-server` и `sshd`.
+If it doesn't connect:
+- Check that **ports 22 and 53 (UDP/TCP) are open**.
+- Verify correct delegation (`dig NS t.example.com +short`).
+- Check `dnstt-server` and `sshd` logs.
 
 ---
 
-## 🧼 Удаление (возврат к исходному состоянию)
+## 🧼 Uninstallation (Return to Original State)
 
 ```bash
 /root/dnstt-setup.sh --uninstall
-# или
+# or
 /root/dnstt-setup.sh -u
 ```
 
-Что делает деинсталляция:
-- Останавливает/удаляет сервис `dnstt-server`.
-- Удаляет `/usr/local/bin/dnstt-server`, `/opt/dnstt`, `/etc/dnstt`.
-- Удаляет редиректы/открытия портов (53/5300) из `iptables` и сохраняет правила.
-- **Не** удаляет правило порта 22 без явного согласия (чтобы не потерять доступ).
-- По желанию удаляет drop‑in `sshd_config.d/99-dnstt.conf` и установленный Go.
+What uninstallation does:
+- Stops/removes the `dnstt-server` service.
+- Removes `/usr/local/bin/dnstt-server`, `/opt/dnstt`, `/etc/dnstt`.
+- Removes redirects/port openings (53/5300) from `iptables` and saves rules.
+- **Does not** remove port 22 rule without explicit consent (to avoid losing access).
+- Optionally removes drop-in `sshd_config.d/99-dnstt.conf` and installed Go.
 
 ---
 
-## ⚠️ Дисклеймер
+## ⚠️ Disclaimer
 
-Используйте DNSTT в рамках закона и политик провайдера. Проект предназначен для обеспечения приватности и работы в ограниченных сетях, а не для несанкционированных действий.
+Use DNSTT within the law and provider policies. The project is intended for privacy and working in restricted networks, not for unauthorized activities.
 
 ---
 
-## ✨ Автор
+## ✨ Author
 
-**by [TrackLine](https://github.com/TrackLine)** 
-📦 лицензия: MIT  
-🧩 основано на [gharib-uk/dnstt](https://github.com/gharib-uk/dnstt)
+**by [TrackLine](https://github.com/TrackLine)**  
+📦 license: MIT  
+🧩 based on [gharib-uk/dnstt](https://github.com/gharib-uk/dnstt)
